@@ -33,8 +33,8 @@ if (process.env.NODE_ENV !== "production") {
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://runshop.netlify.app",
-  "https://runshop-admin.netlify.app",
+  "https://runshop-fixed.netlify.app",
+  "https://runshop-admin-fixed.netlify.app",
 ];
 
 const corsOptions = {
