@@ -1,5 +1,5 @@
 // ---------------------------
-// 🔒 Secure Express Server (Tối ưu bảo mật CSP, ZAP friendly)
+// 🔒 Secure Express Server (ZAP Friendly & Hardened)
 // ---------------------------
 const express = require("express");
 const mongoose = require("mongoose");
@@ -23,34 +23,7 @@ app.use(cookieParser());
 app.use(xss());
 app.use(hpp());
 app.disable("x-powered-by");
-
-if (process.env.NODE_ENV !== "production") {
-  app.use(morgan("dev"));
-}
-
-// ---------------------------
-// 🌐 Cấu hình CORS an toàn
-// ---------------------------
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "https://runshop-fixed.netlify.app",
-  "https://runshop-admin-fixed.netlify.app",
-];
-
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn("❌ Blocked CORS request from:", origin);
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-};
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.disable("etag"); // 🛡️ Tắt ETag để tránh timestamp leak
 
 // ---------------------------
 // 🧱 Helmet bảo mật nâng cao
@@ -61,10 +34,11 @@ app.use(
     crossOriginOpenerPolicy: { policy: "same-origin" },
     crossOriginResourcePolicy: { policy: "same-origin" },
     hidePoweredBy: true,
-    noSniff: true,
-    frameguard: { action: "deny" },
+    noSniff: true, // 🛡️ Chống sniff MIME
+    frameguard: { action: "deny" }, // 🛡️ Chống clickjacking
     referrerPolicy: { policy: "no-referrer" },
     contentSecurityPolicy: {
+      useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: [
@@ -72,10 +46,7 @@ app.use(
           "https://www.googletagmanager.com",
           "https://ssl.google-analytics.com",
         ],
-        styleSrc: [
-          "'self'",
-          "https://fonts.googleapis.com",
-        ],
+        styleSrc: ["'self'", "https://fonts.googleapis.com"],
         imgSrc: [
           "'self'",
           "data:",
@@ -89,7 +60,7 @@ app.use(
           "http://localhost:4000",
         ],
         objectSrc: ["'none'"],
-        frameAncestors: ["'none'"],
+        frameAncestors: ["'none'"], // 🛡️ Ngăn nhúng iframe
         baseUri: ["'self'"],
         formAction: ["'self'"],
         upgradeInsecureRequests: [],
@@ -104,16 +75,55 @@ app.use(
 );
 
 // ---------------------------
+// 🌐 CORS an toàn
+// ---------------------------
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://runshop-fixed.netlify.app",
+  "https://runshop-admin-fixed.netlify.app",
+];
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn("❌ Blocked CORS request from:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
+
+// 🧱 Không cache cho API nhạy cảm
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.removeHeader("Date"); // 🛡️ Ẩn timestamp khỏi header
+  next();
+});
+
+// ---------------------------
 // 🧩 Bảo vệ bổ sung
 // ---------------------------
 app.use(mongoSanitize());
 app.use(
   rateLimit({
-    windowMs: 60 * 1000, // 1 phút
+    windowMs: 60 * 1000,
     max: 100,
     message: "Too many requests, please try again later.",
   })
 );
+
+// ---------------------------
+// 🧾 Log (chỉ dev)
+// ---------------------------
+if (process.env.NODE_ENV !== "production") {
+  app.use(morgan("dev"));
+}
 
 // ---------------------------
 // 📦 Routes
@@ -155,11 +165,11 @@ app.use((err, req, res, next) => {
 mongoose
   .connect(process.env.CONNECTION_STRING)
   .then(() => {
-    console.log("✅ Đã kết nối cơ sở dữ liệu MongoDB");
+    console.log("✅ Đã kết nối MongoDB");
     app.listen(process.env.PORT, () => {
-      console.log(`🚀 Server đang chạy tại http://localhost:${process.env.PORT}`);
+      console.log(`🚀 Server chạy tại http://localhost:${process.env.PORT}`);
     });
   })
   .catch((err) => {
-    console.error("❌ Lỗi kết nối cơ sở dữ liệu:", err);
+    console.error("❌ Lỗi kết nối MongoDB:", err);
   });
